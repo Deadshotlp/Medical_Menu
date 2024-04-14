@@ -1,0 +1,10 @@
+"AddonInfo"
+{
+	"name"		"deadshots_m_menu_v3"
+	"version"	"v1.0"
+	"author_name"	"Deadshot"
+	
+	"info"		"Medic System"
+
+	"override"	"1"
+}
