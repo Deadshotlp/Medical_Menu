@@ -6,6 +6,7 @@
 	[
 		"*.md",
 		"*.psd",
+		"workshop_description.txt",
 		".git*"
 	]
 }

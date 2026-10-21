@@ -1,0 +1,78 @@
+[h1]Deadshot's Medical System[/h1]
+
+[b]English[/b]
+A realistic, standalone medical system for roleplay servers. Hits cause real injuries instead of just lowering health. Vital signs are simulated, players fall unconscious instead of dying, and medics treat them in a detailed treatment window. Everything is configured in-game, and the addon is available in English, German and French.
+
+[b]Deutsch[/b]
+Ein realistisches, eigenständiges Medizinsystem für Roleplay-Server. Treffer verursachen echte Verletzungen statt nur Lebenspunkte abzuziehen. Vitalwerte werden simuliert, Spieler werden bewusstlos statt zu sterben, und Medics versorgen sie in einem ausführlichen Behandlungsfenster. Alles wird im Spiel eingestellt; das Addon gibt es auf Englisch, Deutsch und Französisch.
+
+[b]Français[/b]
+Un système médical réaliste et autonome pour les serveurs de roleplay. Les tirs provoquent de vraies blessures au lieu de simplement retirer des points de vie. Les signes vitaux sont simulés, les joueurs tombent inconscients au lieu de mourir, et les médecins les soignent dans une fenêtre de soins détaillée. Tout se configure en jeu ; l'addon est disponible en anglais, allemand et français.
+
+[hr][/hr]
+
+[h2]Injuries[/h2]
+[list]
+[*][b]Injuries instead of hit points[/b] – every hit creates injuries that match the damage type (blaster, explosion, slash, burn, crush, shock, poison, acid, nerve gas, radiation) and the hit zone.
+[*][b]Around 44 injury types[/b] – from blaster grazes and shrapnel through fractures, burns, concussions and rib fractures to lightsaber cuts and amputations.
+[*][b]Seven body parts[/b] – head, torso, abdomen and each arm and leg, all tracked separately.
+[*][b]Armor[/b] – a configurable armor value lets hits be absorbed before they become injuries.
+[*][b]Bleeding, pain, fractures and infections[/b] – open wounds bleed until they are treated, untreated wounds can become infected, and infections cause fever and, if severe, sepsis.
+[*][b]Healing over time[/b] – treated injuries heal on their own after a while.
+[*][b]Stun ammunition[/b] – optional detection of ArcCW stun ammunition, which stuns instead of injuring.
+[/list]
+
+[h2]Vital signs[/h2]
+[list]
+[*][b]Live simulation[/b] – pulse, blood pressure, oxygen saturation, respiratory rate, blood volume and pain change continuously, depending on injuries, blood loss and medication.
+[*][b]Cardiac arrest[/b] – too little oxygen or blood stops the heart. Only CPR or medication helps then.
+[*][b]Critical value warning[/b] – a small on-screen warning when your own pulse or oxygen is critical.
+[/list]
+
+[h2]Unconsciousness and death[/h2]
+[list]
+[*][b]Unconscious instead of dead[/b] – players fall as a ragdoll and keep their weapons, ammo and armor. They get up at their body once their vitals recover or someone revives them.
+[*][b]Selectable death mode[/b] – decide what puts a player down: only injuries (vital signs), only hit points, or both, whichever comes first.
+[*][b]Blocked airway[/b] – unconscious players not in the recovery position can choke and need their airway cleared.
+[*][b]Respawn timer[/b] – a configurable wait before an unconscious player may respawn, or revival only.
+[*][b]Your own condition[/b] – press F3 while unconscious to see your own state.
+[*][b]Persistence[/b] – optionally keep a player's condition across reconnects.
+[/list]
+
+[h2]Treatment[/h2]
+[list]
+[*][b]Treatment window[/b] – click on a body image to select a body part. It shows the triage card, vital signs (once a monitor is attached), overall condition, the selected part's injuries, an activity log and a quick info log.
+[*][b]Diagnostics[/b] – check pulse and breathing, measure blood pressure and oxygen, palpate for fractures, examine wounds. The results appear in the quick info.
+[*][b]Medication[/b] – auto-injectors and IV drugs to wake up, sedate, relieve pain, stabilise circulation or fight infection (Quick Wake, Nullicaine, Kouhunin, adrenaline, Kryotin, Anticeptin-D), plus saline infusions to restore volume.
+[*][b]Treatments[/b] – disinfect wounds, bacta bandages, synthflesh, removing shrapnel, surgery, bacta tank, splints, bonemer, gas binder, radioprotective, enkephalin, dermasel and prostheses.
+[*][b]Other measures[/b] – recovery position, clearing the airway, vital monitor, tourniquet, IV access and CPR.
+[*][b]Timed actions[/b] – every action takes time and shows a progress bar that can be cancelled. The server checks the duration and range.
+[*][b]Triage cards[/b] – medics mark patients with no, low, medium or high priority, or as deceased.
+[*][b]Medics[/b] – everyone, specific teams or specific user groups count as medics. Advanced actions are reserved for medics, and anyone can give first aid.
+[/list]
+
+[h2]Access[/h2]
+[list]
+[*][b]Context menu[/b] – right-click a player or an unconscious body while holding C and choose "Examine medically".
+[*][b]Medical datapad[/b] – left click examines the target, right click examines yourself. Optionally handed out on spawn to everyone or to medics only.
+[*][b]Console commands[/b] – dms_open (target under the crosshair) and dms_self.
+[/list]
+
+[h2]Configuration[/h2]
+[list]
+[*][b]In-game configuration menu[/b] – opened from an icon in the context menu (hold C) or with dms_config, superadmins only.
+[*][b]Settings[/b] – medic rules, range, datapad, warning display, update rate, death mode, damage per injury, armor, blood regeneration, respawn time, persistence, and every threshold for passing out and waking up, plus infection risk and progression.
+[*][b]Per-injury and per-action overrides[/b] – disable any injury or action, and change frequency, pain, bleeding, effects on vital signs, healing time, action duration, medic-only and drug duration. "Default" restores the original values.
+[*][b]Patients page[/b] – a list of all players with their condition, pulse, oxygen, blood and injuries, with buttons to heal or revive.
+[*][b]Languages[/b] – English (default), German and French, switchable in the menu (dms_language).
+[*][b]No database needed[/b] – everything is stored in the server's SQLite database (sv.db).
+[/list]
+
+[h2]Requirements[/h2]
+No extra Workshop content is required. The body images are included, and the datapad uses the Half-Life 2 medkit model.
+
+[h2]Notes[/h2]
+[list]
+[*]Built as a server addon. Other addons that also replace death or damage handling may conflict with it.
+[*]Bugs and suggestions are welcome in the comments.
+[/list]
