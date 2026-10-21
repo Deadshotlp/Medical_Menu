@@ -1,0 +1,11 @@
+{
+	"title"		:	"Deadshot's Medical System",
+	"type"		:	"servercontent",
+	"tags"		:	[ "roleplay", "realism" ],
+	"ignore"	:
+	[
+		"*.md",
+		"*.psd",
+		".git*"
+	]
+}
