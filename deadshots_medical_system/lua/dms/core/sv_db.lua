@@ -1,7 +1,8 @@
 --[[
     DMS - Speicher (SQLite, sv.db).
 
-      dms_settings  key -> JSON-Wert (Einstellungen, "overrides")
+      dms_settings  key -> JSON-Wert (Einstellungen, "overrides", "custom"
+                    = eigene Inhalte, data/sh_custom.lua)
       dms_patients  steamid -> JSON (Zustand eines Spielers, wenn
                     "persist" an ist)
 ]]
@@ -19,17 +20,20 @@ local function encode(v) return util.TableToJSON({v = v}) or "{}" end
 local function decode(s) local t = util.JSONToTable(s or "") return t and t.v end
 
 function DB.LoadSettings()
-    local values, overrides = {}, {}
+    local values, overrides, custom = {}, {}, {}
     for _, row in ipairs(sql.Query("SELECT key, value FROM dms_settings") or {}) do
         local v = decode(row.value)
         if row.key == "overrides" then
             overrides = istable(v) and v or {}
+        elseif row.key == "custom" then
+            custom = istable(v) and v or {}
         elseif DMS.SettingDefsByKey[row.key] and v ~= nil then
             values[row.key] = v
         end
     end
     DMS.Config.Values = values
     DMS.Config.Overrides = overrides
+    DMS.Config.Custom = custom
 end
 
 function DB.SaveSetting(key, value)
@@ -52,7 +56,8 @@ end
 
 -- Einstellungen an einen oder alle Clients
 function DMS.SendConfig(target)
-    local packed = util.Compress(util.TableToJSON({values = DMS.Config.Values, overrides = DMS.Config.Overrides}) or "{}") or ""
+    local packed = util.Compress(util.TableToJSON({values = DMS.Config.Values, overrides = DMS.Config.Overrides,
+        custom = DMS.Config.Custom}) or "{}") or ""
     net.Start("DMS.Config")
     net.WriteUInt(#packed, 32)
     net.WriteData(packed, #packed)

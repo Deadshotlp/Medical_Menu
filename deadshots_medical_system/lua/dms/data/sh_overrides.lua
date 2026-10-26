@@ -2,7 +2,8 @@
     DMS - Anpassungen aus dem Konfigurationsmenue.
 
     DMS.Config.Overrides = {
-        injuries = {[id] = {disabled, weight, pain, bleeding, puls, bp, spo2, heal}},
+        injuries = {[id] = {disabled, weight, pain, bleeding, puls, bp, spo2, heal,
+                            treatment = {ids}, transform = {[behandlung] = ziel}}},
         actions  = {[id] = {disabled, time, medic, duration}},
     }
     Die Werte aus dem Code bleiben als Standard gemerkt; ApplyOverrides setzt
@@ -35,6 +36,8 @@ DMS.InjuryFields = {
     {"bp", "number", "Blutdruck-Faktor"},
     {"spo2", "number", "Sauerstoff (Punkte)"},
     {"heal", "number", "Heilzeit (s)"},
+    {"treatment", "list", "Behandlungen (IDs)"},
+    {"transform", "map", "Umwandlung (Behandlung = Ziel)"},
 }
 DMS.ActionFields = {
     {"time", "number", "Dauer der Anwendung (s)"},
@@ -47,10 +50,15 @@ DMS.MedicationFields = {
 local function remember(item, fields)
     item.defaults = item.defaults or {}
     for _, f in ipairs(fields) do
-        if item.defaults[f[1]] == nil then item.defaults[f[1]] = item[f[1]] end
+        if item.defaults[f[1]] == nil then
+            local v = item[f[1]]
+            if f[2] == "list" or f[2] == "map" then v = table.Copy(v or {}) end
+            item.defaults[f[1]] = v
+        end
     end
     if item.defaults.disabled == nil then item.defaults.disabled = item.disabled or false end
 end
+DMS.RememberDefaults = remember
 
 for _, inj in ipairs(DMS.Injuries) do remember(inj, DMS.InjuryFields) end
 for _, a in pairs(DMS.ActionsById) do
@@ -67,7 +75,12 @@ end
 
 function DMS.ApplyOverrides()
     local o = DMS.Config.Overrides or {}
-    for _, inj in ipairs(DMS.Injuries) do apply(inj, (o.injuries or {})[inj.id]) end
+    for _, inj in ipairs(DMS.Injuries) do
+        apply(inj, (o.injuries or {})[inj.id])
+        -- Tabellen nie teilen: Verletzungen am Patienten kopieren ihre Liste
+        inj.treatment = table.Copy(inj.treatment or {})
+        inj.transform = table.Copy(inj.transform or {})
+    end
     for id, a in pairs(DMS.ActionsById) do apply(a, (o.actions or {})[id]) end
 end
 

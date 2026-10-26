@@ -3,6 +3,7 @@
 
       DMS.CfgSet       Einstellung setzen (Schluessel, Wert als JSON)
       DMS.CfgOverride  Anpassung einer Verletzung/Aktion (Art, ID, JSON oder leer = Standard)
+      DMS.CfgCustom    eigener Inhalt (Art, ID, JSON oder leer = loeschen), data/sh_custom.lua
       DMS.CfgReset     alle Einstellungen und Anpassungen zuruecksetzen
       DMS.CfgLang      Sprache (dms_language)
       DMS.CfgPatients  Liste der Spieler mit Zustand anfordern / senden
@@ -13,7 +14,7 @@ DMS = DMS or {}
 
 local L = DMS.L
 
-for _, n in ipairs({"DMS.CfgSet", "DMS.CfgOverride", "DMS.CfgReset", "DMS.CfgLang", "DMS.CfgPatients", "DMS.CfgAdmin"}) do
+for _, n in ipairs({"DMS.CfgSet", "DMS.CfgOverride", "DMS.CfgCustom", "DMS.CfgReset", "DMS.CfgLang", "DMS.CfgPatients", "DMS.CfgAdmin"}) do
     util.AddNetworkString(n)
 end
 
@@ -22,6 +23,7 @@ local function allowed(ply)
 end
 
 local function changed()
+    DMS.RebuildCustom()
     DMS.ApplyOverrides()
     DMS.SendConfig()
 end
@@ -62,6 +64,22 @@ net.Receive("DMS.CfgOverride", function(_, ply)
                 clean[k] = tonumber(v)
             elseif fields[k] == "bool" then
                 clean[k] = v == true
+            elseif fields[k] == "list" and istable(v) then
+                -- nur bekannte Behandlungen
+                local list = {}
+                for _, t in ipairs(v) do
+                    local a = DMS.ActionsById[t]
+                    if a and a.category == "treatments" then list[#list + 1] = t end
+                end
+                clean[k] = list
+            elseif fields[k] == "map" and istable(v) then
+                -- Behandlung -> Verletzung oder "remove"
+                local map = {}
+                for t, target in pairs(v) do
+                    local a = DMS.ActionsById[t]
+                    if a and a.category == "treatments" and (target == "remove" or DMS.InjuriesById[target]) then map[t] = target end
+                end
+                clean[k] = map
             end
         end
         o[kind][id] = next(clean) and clean or nil
@@ -72,11 +90,38 @@ net.Receive("DMS.CfgOverride", function(_, ply)
     changed()
 end)
 
+net.Receive("DMS.CfgCustom", function(_, ply)
+    if not allowed(ply) then return end
+    local kind, id = net.ReadString(), DMS.CustomId(net.ReadString())
+    local data = util.JSONToTable(net.ReadString() or "")
+    if not DMS.CustomSchema[kind] or id == "" then return end
+    if DMS.IsBuiltinId(id) then
+        ply:ChatPrint("[DMS] " .. string.format(L("Die ID %s gehört zu einem mitgelieferten Eintrag."), id))
+        return
+    end
+    -- Eine ID gilt nur fuer eine Art
+    for _, k in ipairs(DMS.CustomKinds) do
+        if k.key ~= kind and ((DMS.Config.Custom or {})[k.key] or {})[id] then
+            ply:ChatPrint("[DMS] " .. string.format(L("Die ID %s ist schon vergeben."), id))
+            return
+        end
+    end
+
+    local c = DMS.Config.Custom or {}
+    DMS.Config.Custom = c
+    c[kind] = c[kind] or {}
+    c[kind][id] = istable(data) and DMS.CleanCustom(kind, data) or nil
+    DMS.DB.SaveSetting("custom", c)
+    changed()
+    ply:ChatPrint("[DMS] " .. (c[kind][id] and string.format(L("%s gespeichert."), id) or string.format(L("%s gelöscht."), id)))
+end)
+
 net.Receive("DMS.CfgReset", function(_, ply)
     if not allowed(ply) then return end
     sql.Query("DELETE FROM dms_settings")
     DMS.Config.Values = {}
     DMS.Config.Overrides = {}
+    DMS.Config.Custom = {}
     changed()
     ply:ChatPrint("[DMS] " .. L("Alle Einstellungen zurückgesetzt."))
 end)

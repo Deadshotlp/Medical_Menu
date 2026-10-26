@@ -21,6 +21,7 @@ DMS.SettingDefs = {
         {"teams_groups", "Teams oder Benutzergruppen"}}},
     {"medic_teams", "", "string", "general", "Medic-Teams", "Teamnamen, mit Komma getrennt"},
     {"medic_groups", "", "string", "general", "Medic-Benutzergruppen", "z. B. medic, admin"},
+    {"darkrp_medic", false, "bool", "general", "DarkRP Medic verwenden", "Medic = Job mit medic = true (ersetzt die Auswahl oben)"},
     {"interaction_range", 100, "number", "general", "Reichweite für Behandlungen", "Einheiten"},
     {"auto_datapad", "medics", "choice", "general", "Medizinisches Datapad beim Spawn", "", {
         {"none", "Niemand"}, {"medics", "Nur Medics"}, {"all", "Alle Spieler"}}},
@@ -112,6 +113,8 @@ if CLIENT then
         local data = util.JSONToTable(util.Decompress(net.ReadData(size)) or "") or {}
         DMS.Config.Values = data.values or {}
         DMS.Config.Overrides = data.overrides or {}
+        DMS.Config.Custom = data.custom or {}
+        if DMS.RebuildCustom then DMS.RebuildCustom() end
         if DMS.ApplyOverrides then DMS.ApplyOverrides() end
         hook.Run("DMS.ConfigChanged")
     end)

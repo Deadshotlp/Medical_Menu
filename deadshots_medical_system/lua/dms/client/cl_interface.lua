@@ -7,6 +7,10 @@
     rechts Uebersicht und Vitalwerte, unten Aktivitaetsprotokoll und
     Schnellinfo. Aktionen laufen mit Fortschrittsbalken; die Dauer prueft der
     Server.
+
+    Aktualisiert wird je Bereich nur, was sich geaendert hat (Kennungen in
+    IF.Refresh; Uebersicht tauscht nur Texte) - sonst flackerte das Fenster
+    bei jeder Berechnung.
 ]]
 
 DMS = DMS or {}
@@ -122,9 +126,22 @@ local function partInjuries(data, part)
     return out
 end
 
-local function buildActions(panel)
-    panel:Clear()
+-- Moegliche Aktionen im gewaehlten Tab (fuer Anzeige und Kennung)
+local function availableActions()
     local data, patient = IF.data, IF.patient
+    local cat
+    for _, c in ipairs(DMS.ActionCategories) do if c.key == IF.tab then cat = c end end
+    local out = {}
+    if IF.part == 0 then return out end
+    for _, action in ipairs(cat and cat.list or {}) do
+        if DMS.CanDoAction(LocalPlayer(), action, data, IF.part, patient) then out[#out + 1] = action end
+    end
+    return out
+end
+
+local function buildActions(panel, actions)
+    panel:Clear()
+    local patient = IF.patient
 
     local tabs = vgui.Create("DPanel", panel)
     tabs:Dock(TOP)
@@ -150,30 +167,35 @@ local function buildActions(panel)
         return
     end
 
-    local cat
-    for _, c in ipairs(DMS.ActionCategories) do if c.key == IF.tab then cat = c end end
-    local count = 0
-    for _, action in ipairs(cat and cat.list or {}) do
-        if DMS.CanDoAction(LocalPlayer(), action, data, IF.part, patient) then
-            local b = UI.Button(scroll, L(action.name) .. "  (" .. (action.time or 0) .. " s)", function()
-                if IF.running then return end
-                net.Start("DMS.Action")
-                net.WriteString("start")
-                net.WriteEntity(patient)
-                net.WriteString(action.id)
-                net.WriteUInt(IF.part, 4)
-                net.SendToServer()
-            end, action.medic and COL.accent or COL.info)
-            b:Dock(TOP)
-            b:DockMargin(0, 0, 0, 4)
-            b:SetTall(34)
-            count = count + 1
-        end
+    for _, action in ipairs(actions) do
+        local b = UI.Button(scroll, L(action.name) .. "  (" .. (action.time or 0) .. " s)", function()
+            if IF.running then return end
+            net.Start("DMS.Action")
+            net.WriteString("start")
+            net.WriteEntity(patient)
+            net.WriteString(action.id)
+            net.WriteUInt(IF.part, 4)
+            net.SendToServer()
+        end, action.medic and COL.accent or COL.info)
+        b:Dock(TOP)
+        b:DockMargin(0, 0, 0, 4)
+        b:SetTall(34)
     end
-    if count == 0 then UI.Info(scroll, L("Hier ist gerade nichts möglich."), COL.dim, "DMS.16") end
+    if #actions == 0 then UI.Info(scroll, L("Hier ist gerade nichts möglich."), COL.dim, "DMS.16") end
     if not DMS.IsMedic(LocalPlayer()) then
         UI.Info(scroll, L("Weitere Aktionen können nur Medics ausführen."), COL.dim, "DMS.12")
     end
+end
+
+-- Zustand je Koerperteil fuer das Koerperbild (aus den aktuellen Daten)
+local function partStates(data)
+    local injured, fractured, tourniquet = {}, {}, {}
+    for _, inj in ipairs(data.injuries or {}) do injured[inj.wo == 3 and 2 or inj.wo] = true end
+    for i, bp in ipairs(data.body_part or {}) do
+        if bp.fractured then fractured[i] = true end
+        if bp.tourniquet then tourniquet[i] = true end
+    end
+    return injured, fractured, tourniquet
 end
 
 local function buildBody(panel)
@@ -202,18 +224,12 @@ local function buildBody(panel)
         l:SetContentAlignment(5)
     end
 
-    -- Zustand je Koerperteil
-    local injured, fractured, tourniquet = {}, {}, {}
-    for _, inj in ipairs(data.injuries or {}) do injured[inj.wo == 3 and 2 or inj.wo] = true end
-    for i, bp in ipairs(data.body_part or {}) do
-        if bp.fractured then fractured[i] = true end
-        if bp.tourniquet then tourniquet[i] = true end
-    end
-
     local body = vgui.Create("DPanel", panel)
     body:Dock(FILL)
     body:DockMargin(0, 6, 0, 0)
     body.Paint = function(s, w, h)
+        -- Zustand bei jedem Zeichnen aus den neuesten Daten: kein Neuaufbau noetig
+        local injured, fractured, tourniquet = partStates(IF.data or {})
         local size = math.min(w, h)
         local x, y = (w - size) / 2, (h - size) / 2
         s.box = {x, y, size}
@@ -263,91 +279,124 @@ local function buildBody(panel)
     body:SetCursor("hand")
 end
 
-local function line(scroll, text, col, font)
-    local l = UI.Label(scroll, text, font or "DMS.16", col or COL.text)
-    l:Dock(TOP)
-    l:SetTall(22)
-    return l
-end
-
-local function buildOverview(panel)
-    panel:Clear()
-    local data = IF.data
-    local scroll = UI.Scroll(panel)
+-- Uebersicht als Zeilen {Text, Farbe, Schrift, Umbruch}
+local function overviewLines(data)
+    local out = {}
+    local function line(text, col, font, wrap) out[#out + 1] = {text, col or COL.text, font or "DMS.16", wrap} end
 
     if data.vital_monitoring then
-        line(scroll, L("Vitalwerte"), COL.dim, "DMS.14")
-        line(scroll, string.format(L("Puls: %d bpm"), data.puls or 0), (data.puls or 0) < 50 and COL.bad or COL.text)
-        line(scroll, string.format(L("Blutdruck: %d/%d mmHg"), data.bp[1], data.bp[2]))
-        line(scroll, string.format(L("Sauerstoffsättigung: %d %%"), data.spo2 or 0), (data.spo2 or 0) < 85 and COL.bad or COL.text)
-        line(scroll, string.format(L("Atemfrequenz: %d/min"), data.respiratory_system.breathing_rate or 0))
-        line(scroll, "")
+        line(L("Vitalwerte"), COL.dim, "DMS.14")
+        line(string.format(L("Puls: %d bpm"), data.puls or 0), (data.puls or 0) < 50 and COL.bad or COL.text)
+        line(string.format(L("Blutdruck: %d/%d mmHg"), data.bp[1], data.bp[2]))
+        line(string.format(L("Sauerstoffsättigung: %d %%"), data.spo2 or 0), (data.spo2 or 0) < 85 and COL.bad or COL.text)
+        line(string.format(L("Atemfrequenz: %d/min"), data.respiratory_system.breathing_rate or 0))
+        line("")
     end
 
-    line(scroll, L("Gesamtzustand"), COL.dim, "DMS.14")
+    line(L("Gesamtzustand"), COL.dim, "DMS.14")
     if data.alive then
-        line(scroll, L("Bei Bewusstsein"), COL.ok)
+        line(L("Bei Bewusstsein"), COL.ok)
     else
         local left = data.down_left
-        line(scroll, L("Bewusstlos") .. ((left and left > 0) and string.format(L(" (Respawn möglich in %d s)"), left) or ""), COL.bad)
+        line(L("Bewusstlos") .. ((left and left > 0) and string.format(L(" (Respawn möglich in %d s)"), left) or ""), COL.bad)
     end
 
     local blood = data.blood_amount or 5.5
-    if blood >= 5.4 then line(scroll, L("Kein Blutverlust"), COL.ok)
-    elseif blood > 4.0 then line(scroll, L("Geringer Blutverlust"), COL.warn)
-    elseif blood > 3.0 then line(scroll, L("Starker Blutverlust"), Color(255, 125, 0))
-    else line(scroll, L("Tödlicher Blutverlust"), COL.bad) end
+    if blood >= 5.4 then line(L("Kein Blutverlust"), COL.ok)
+    elseif blood > 4.0 then line(L("Geringer Blutverlust"), COL.warn)
+    elseif blood > 3.0 then line(L("Starker Blutverlust"), Color(255, 125, 0))
+    else line(L("Tödlicher Blutverlust"), COL.bad) end
 
     local pain = data.pain_level or 0
-    if not data.alive then line(scroll, L("Keine Reaktion auf Schmerz"), COL.bad)
-    elseif pain <= 0.05 then line(scroll, L("Kein Schmerz"), COL.ok)
-    elseif pain < 1.5 then line(scroll, L("Leichter Schmerz"), COL.warn)
-    elseif pain < 3 then line(scroll, L("Mäßiger Schmerz"), Color(255, 125, 0))
-    else line(scroll, L("Starker Schmerz"), COL.bad) end
+    if not data.alive then line(L("Keine Reaktion auf Schmerz"), COL.bad)
+    elseif pain <= 0.05 then line(L("Kein Schmerz"), COL.ok)
+    elseif pain < 1.5 then line(L("Leichter Schmerz"), COL.warn)
+    elseif pain < 3 then line(L("Mäßiger Schmerz"), Color(255, 125, 0))
+    else line(L("Starker Schmerz"), COL.bad) end
 
-    if not data.respiratory_system.airway_clear then line(scroll, L("Atemwege verlegt"), COL.bad) end
-    if data.recovery_position then line(scroll, L("In stabiler Seitenlage"), COL.info) end
-    if (data.stunning_level or 0) > 0.05 then line(scroll, L("Betäubt"), COL.warn) end
+    if not data.respiratory_system.airway_clear then line(L("Atemwege verlegt"), COL.bad) end
+    if data.recovery_position then line(L("In stabiler Seitenlage"), COL.info) end
+    if (data.stunning_level or 0) > 0.05 then line(L("Betäubt"), COL.warn) end
     if #(data.infections or {}) > 0 and data.vital_monitoring then
-        line(scroll, string.format(L("Fieber (%d Infektion(en))"), #data.infections), COL.warn)
+        line(string.format(L("Fieber (%d Infektion(en))"), #data.infections), COL.warn)
     end
     if #(data.medication or {}) > 0 then
         local names = {}
         for _, m in ipairs(data.medication) do names[#names + 1] = L(m.name) end
-        line(scroll, L("Medikamente: ") .. table.concat(names, ", "), COL.info, "DMS.14")
+        line(L("Medikamente: ") .. table.concat(names, ", "), COL.info, "DMS.14", true)
     end
 
-    line(scroll, "")
+    line("")
     if IF.part == 0 then
-        line(scroll, L("Kein Körperteil ausgewählt"), COL.dim)
-        return
+        line(L("Kein Körperteil ausgewählt"), COL.dim)
+        return out
     end
 
     local part = data.body_part[IF.part] or {}
-    line(scroll, L(DMS.BodyParts[IF.part].name), COL.text, "DMS.20")
+    line(L(DMS.BodyParts[IF.part].name), COL.text, "DMS.20")
     local bleeding = (part.bleeding or 0) + (IF.part == 2 and (data.body_part[3] or {}).bleeding or 0)
-    if bleeding > 0 then line(scroll, part.tourniquet and L("Blutung (abgebunden)") or L("Blutet"), part.tourniquet and COL.warn or COL.bad) end
-    if part.fractured then line(scroll, L("Fraktur"), COL.bad) end
-    if part.tourniquet then line(scroll, L("Tourniquet angelegt"), COL.info) end
-    if part.has_iv then line(scroll, L("Zugang gelegt"), COL.info) end
+    if bleeding > 0 then line(part.tourniquet and L("Blutung (abgebunden)") or L("Blutet"), part.tourniquet and COL.warn or COL.bad) end
+    if part.fractured then line(L("Fraktur"), COL.bad) end
+    if part.tourniquet then line(L("Tourniquet angelegt"), COL.info) end
+    if part.has_iv then line(L("Zugang gelegt"), COL.info) end
 
     local injuries = partInjuries(data, IF.part)
     if #injuries == 0 then
-        line(scroll, L("Keine Verletzungen"), COL.ok)
+        line(L("Keine Verletzungen"), COL.ok)
     else
-        line(scroll, L("Verletzungen:"), COL.dim, "DMS.14")
+        line(L("Verletzungen:"), COL.dim, "DMS.14")
         for _, inj in ipairs(injuries) do
             local rest = #(inj.treatment or {})
-            local col = rest == 0 and COL.ok or COL.text
-            local l = line(scroll, "• " .. L(inj.name) .. (rest > 0 and string.format(L("  (noch %d Behandlung(en))"), rest) or L("  (versorgt)")),
-                col, "DMS.14")
+            line("• " .. L(inj.name) .. (rest > 0 and string.format(L("  (noch %d Behandlung(en))"), rest) or L("  (versorgt)")),
+                rest == 0 and COL.ok or COL.text, "DMS.14", true)
+        end
+    end
+    return out
+end
+
+-- Zeilen anzeigen: gleicher Aufbau -> nur Text und Farbe tauschen (kein
+-- Neuaufbau, kein Flackern, Bildlauf bleibt), sonst neu anlegen
+local function showLines(panel, specs)
+    local labels = panel.dmsLabels
+    local same = labels and #labels == #specs
+    if same then
+        for i, s in ipairs(specs) do
+            if labels[i].dmsFont ~= s[3] or labels[i].dmsWrap ~= s[4] then same = false break end
+        end
+    end
+    if same then
+        for i, s in ipairs(specs) do
+            local l = labels[i]
+            if l:GetText() ~= s[1] then l:SetText(s[1]) end
+            l:SetTextColor(s[2])
+        end
+        return
+    end
+
+    panel:Clear()
+    local scroll = UI.Scroll(panel)
+    labels = {}
+    for i, s in ipairs(specs) do
+        local l = UI.Label(scroll, s[1], s[3], s[2])
+        l:Dock(TOP)
+        l:SetTall(22)
+        l.dmsFont, l.dmsWrap = s[3], s[4]
+        if s[4] then
             l:SetWrap(true)
             l:SetAutoStretchVertical(true)
         end
+        labels[i] = l
     end
+    panel.dmsLabels = labels
 end
 
 local function buildLog(panel, title, entries)
+    -- Nur bei neuen Eintraegen neu aufbauen
+    local last = entries[#entries]
+    local sig = #entries .. ":" .. (last and (tostring(last.time) .. tostring(last.str)) or "")
+    if panel.dmsSig == sig then return end
+    panel.dmsSig = sig
+
     panel:Clear()
     local head = UI.Label(panel, title, "DMS.16", COL.dim)
     head:Dock(TOP)
@@ -366,19 +415,32 @@ end
 -- Fenster
 --------------------------------------------------------------------------------
 
+-- Aktualisieren: jeder Bereich nur, wenn sich sein Inhalt geaendert hat
+-- (full = alles neu, z. B. anderer Koerperteil oder Tab)
 function IF.Refresh(full)
     if not IsValid(IF.frame) or not IF.data then return end
-    if full or not IF.lastPart or IF.lastPart ~= IF.part then
-        buildActions(IF.actions)
-        buildBody(IF.body)
-        IF.lastPart = IF.part
-    else
-        -- Aktionen neu, wenn sich am Patienten etwas geaendert hat, das die Auswahl betrifft
-        buildActions(IF.actions)
+    local data = IF.data
+    local medic = DMS.IsMedic(LocalPlayer())
+
+    local actions = availableActions()
+    local ids = {}
+    for i, a in ipairs(actions) do ids[i] = a.id end
+    local actionSig = IF.tab .. ":" .. IF.part .. ":" .. tostring(medic) .. ":" .. table.concat(ids, ",")
+    if full or IF.actionSig ~= actionSig then
+        buildActions(IF.actions, actions)
+        IF.actionSig = actionSig
     end
-    buildOverview(IF.overview)
-    buildLog(IF.log, L("Aktivitätsprotokoll"), IF.data.activity_log or {})
-    buildLog(IF.quick, L("Schnellinfo"), IF.data.quick_overview_log or {})
+
+    local bodySig = tostring(data.triage_card or 0) .. ":" .. tostring(medic)
+    if full or IF.bodySig ~= bodySig then
+        buildBody(IF.body)
+        IF.bodySig = bodySig
+    end
+
+    showLines(IF.overview, overviewLines(data))
+    if full then IF.log.dmsSig, IF.quick.dmsSig = nil, nil end
+    buildLog(IF.log, L("Aktivitätsprotokoll"), data.activity_log or {})
+    buildLog(IF.quick, L("Schnellinfo"), data.quick_overview_log or {})
 end
 
 function IF.Close()
@@ -459,7 +521,7 @@ function IF.Open()
         IF.overview:SetWide(mw * 0.3)
     end
 
-    IF.lastPart = nil
+    IF.actionSig, IF.bodySig = nil, nil
     IF.Refresh(true)
 end
 

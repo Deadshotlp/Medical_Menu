@@ -71,6 +71,11 @@ function DMS.InRange(actor, patient, extra)
     return eye:DistToSqr(body:NearestPoint(eye)) <= range * range
 end
 
+-- Laeuft DarkRP? (Jobs mit eigenen Feldern wie medic = true)
+function DMS.HasDarkRP()
+    return istable(DarkRP) and istable(RPExtraTeams)
+end
+
 -- Medic? Server entscheidet (Einstellungen) und verteilt es als NW2-Bool
 function DMS.IsMedic(ply)
     if not IsValid(ply) or not ply:IsPlayer() then return false end

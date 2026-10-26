@@ -41,12 +41,7 @@ end
 
 function DMS.AddInjury(ply, def, hitgroup)
     local tbl = DMS.GetPatient(ply)
-    table.insert(tbl.injuries, {
-        id = def.id, name = def.name, wo = hitgroup,
-        bleeding = def.bleeding, pain = def.pain, puls = def.puls, spo2 = def.spo2, bp = def.bp,
-        breathing = def.breathing, heal = def.heal, disinfect = def.disinfect or nil, fracture = def.fracture or nil,
-        treatment = table.Copy(def.treatment or {}),
-    })
+    table.insert(tbl.injuries, DMS.MakeInjury(def, hitgroup))
     DMS.Log(tbl, string.format(L("Verletzung: %s (%s)"), L(def.name), L(DMS.BodyParts[hitgroup].name)))
 end
 

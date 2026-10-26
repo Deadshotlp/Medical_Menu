@@ -7,6 +7,9 @@
     (Blutung stillen, Schmerz senken, desinfizieren, Bruch richten ...).
     Nach der letzten Behandlung ist die Verletzung versorgt.
 
+    Hat die Verletzung fuer diese Behandlung eine Umwandlung ("transform"),
+    wird sie stattdessen zu einer anderen Verletzung oder entfernt.
+
     Aktionen (auch Medikamente, Massnahmen, Diagnosen) haben:
       id, name, time (s), medic (nur Medics), condition, effect
 ]]
@@ -15,7 +18,7 @@ DMS = DMS or {}
 
 local function scale(field, f) return function(inj) inj[field] = (inj[field] or 0) * f end end
 
--- Wirkung je Behandlung auf die Verletzung
+-- Wirkung je Behandlung auf die Verletzung (eigene Behandlungen: sh_custom.lua)
 local EFFECTS = {
     bacta_verband = function(inj) inj.bleeding = 0 inj.disinfected = true end,
     synth_fleisch = function(inj) inj.bleeding = 0 end,
@@ -29,7 +32,33 @@ local EFFECTS = {
     bonemer = function(inj) inj.fracture = false end,
     prothese_anbauen = function(inj) inj.bleeding = 0 inj.pain = inj.pain * 0.3 end,
     radioprotektivum = function(inj) inj.puls, inj.bp = 0, 0 end,
+    knochensplitter_entfernen = function(inj) inj.bleeding = 0 inj.pain = inj.pain * 0.7 end,
 }
+DMS.TreatmentEffects = EFFECTS
+
+-- Verletzung in eine andere umwandeln ("remove" = entfernen). Die Stelle
+-- bleibt; eine bereits desinfizierte Wunde bleibt desinfiziert.
+function DMS.TransformInjury(tbl, inj, target)
+    local idx
+    for i, other in ipairs(tbl.injuries or {}) do
+        if other == inj then idx = i break end
+    end
+    if not idx then return false end
+    local L = DMS.L
+    if target == "remove" then
+        table.remove(tbl.injuries, idx)
+        if DMS.Log then DMS.Log(tbl, string.format(L("%s versorgt"), L(inj.name))) end
+        return true
+    end
+    local def = DMS.InjuriesById[target]
+    if not def then return false end
+    local new = DMS.MakeInjury(def, inj.wo)
+    if inj.disinfected and new.disinfect then new.disinfected = true end
+    new.infected = inj.infected
+    tbl.injuries[idx] = new
+    if DMS.Log then DMS.Log(tbl, string.format(L("%s wird zu %s"), L(inj.name), L(def.name))) end
+    return true
+end
 
 -- Verletzungen am Koerperteil, die diese Behandlung brauchen
 function DMS.InjuriesNeeding(tbl, part, key)
@@ -50,6 +79,11 @@ function DMS.ApplyTreatment(actor, tbl, part, key)
     local inj = DMS.InjuriesNeeding(tbl, part, key)[1]
     if not inj then return end
 
+    -- Umwandlung (Definition, ggf. aus dem Konfigurationsmenue angepasst)
+    local def = DMS.InjuriesById[inj.id]
+    local target = def and istable(def.transform) and def.transform[key]
+    if target and DMS.TransformInjury(tbl, inj, target) then return end
+
     local count = #inj.treatment
     inj.heal = inj.heal - inj.heal / math.max(count, 1)
     table.RemoveByValue(inj.treatment, key)
@@ -69,6 +103,7 @@ DMS.Treatments = {
     treatment("bacta_verband", "Bacta-Verband anlegen", 5, false),
     treatment("synth_fleisch", "Synthfleisch einbringen", 10, true),
     treatment("oberflaechige_splitter_entfernen", "Oberflächliche Splitter entfernen", 15, true),
+    treatment("knochensplitter_entfernen", "Knochensplitter entfernen", 20, true),
     treatment("operativer_eingriff", "Operativer Eingriff", 15, true),
     treatment("bacta_tank", "Bacta-Tank-Behandlung", 15, true),
     treatment("schienung", "Schiene anlegen", 10, false),

@@ -49,6 +49,11 @@ end
 --------------------------------------------------------------------------------
 
 function DMS.ComputeMedic(ply)
+    -- DarkRP: das Feld "medic" im Job (wie beim mitgelieferten Medic-Job)
+    if DMS.Get("darkrp_medic") and DMS.HasDarkRP() then
+        local job = ply.getJobTable and ply:getJobTable()
+        return istable(job) and job.medic == true
+    end
     local mode = DMS.Get("medic_mode")
     if mode == "all" then return true end
     local byTeam, byGroup = false, false

@@ -31,6 +31,7 @@ local FILES = {
     "data/sh_other.lua",
     "data/sh_diagnostics.lua",
     "data/sh_overrides.lua",
+    "data/sh_custom.lua",
 
     "sim/sv_patients.lua",
     "sim/sv_vitals.lua",

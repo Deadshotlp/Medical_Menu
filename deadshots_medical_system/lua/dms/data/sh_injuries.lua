@@ -16,9 +16,14 @@
       fracture   Knochenbruch (Koerperteil zeigt "Fraktur")
       armor      true = Ruestung schuetzt (sonst geht sie durch)
       treatment  noetige Behandlungen (IDs aus sh_treatments.lua)
+      transform  Behandlung -> andere Verletzung ({[behandlung] = "ziel"}):
+                 statt die Liste abzuarbeiten, wird die Verletzung zu "ziel"
+                 (mit dessen Werten und Behandlungen) oder mit "remove"
+                 entfernt. Beispiel: Splitterbruch -> Splitter entfernen ->
+                 einfacher Bruch.
 
     Alle Werte (ausser Bedingungen) lassen sich im Konfigurationsmenue
-    anpassen; Verletzungen auch abschalten.
+    anpassen; Verletzungen auch abschalten. Eigene Verletzungen: sh_custom.lua.
 ]]
 
 DMS = DMS or {}
@@ -134,7 +139,11 @@ I("amputation_lowerleg", "Amputation des Unterschenkels", {DMG_ENERGYBEAM, DMG_D
 I("fracture_simple", "Einfacher Knochenbruch", {DMG_FALL, DMG_VEHICLE}, LIMBS, {fracture = true, pain = 0.8, heal = 600,
     treatment = {"bacta_verband", "schienung", "bonemer"}})
 I("fracture_complex", "Komplizierter Knochenbruch", {DMG_FALL, DMG_VEHICLE}, LIMBS, {fracture = true, pain = 0.8, puls = 0.2, bp = -0.2,
-    heal = 600, treatment = {"bacta_verband", "schienung", "operativer_eingriff", "bonemer"}})
+    heal = 600, treatment = {"bacta_verband", "schienung", "operativer_eingriff", "bonemer"},
+    transform = {operativer_eingriff = "fracture_simple"}})
+I("fracture_comminuted", "Splitterbruch", {DMG_FALL, DMG_VEHICLE, DMG_BLAST}, LIMBS, {fracture = true, disinfect = true, bleeding = 0.0003,
+    pain = 0.9, puls = 0.2, bp = -0.2, heal = 900, weight = 4, treatment = {"knochensplitter_entfernen", "bacta_verband", "schienung"},
+    transform = {knochensplitter_entfernen = "fracture_simple"}})
 I("fracture_open", "Offener Knochenbruch", {DMG_FALL, DMG_VEHICLE}, LIMBS, {fracture = true, disinfect = true, bleeding = 0.001, pain = 0.9,
     puls = 0.2, bp = -0.2, heal = 600, weight = 6, treatment = {"bacta_verband", "schienung", "synth_fleisch", "operativer_eingriff", "bonemer"}})
 I("spine", "Wirbelsäulenverletzung", {DMG_FALL, DMG_VEHICLE}, TORSO, {pain = 0.9, puls = 0.2, bp = -0.2, heal = 600, weight = 4,
@@ -162,6 +171,16 @@ I("radiation_burn", "Strahlenverbrennung", {DMG_RADIATION}, nil, {disinfect = tr
 DMS.Injuries = list
 DMS.InjuriesById = {}
 for _, inj in ipairs(list) do DMS.InjuriesById[inj.id] = inj end
+
+-- Neue Verletzung am Patienten (Kopie der Werte aus der Definition)
+function DMS.MakeInjury(def, wo)
+    return {
+        id = def.id, name = def.name, wo = wo,
+        bleeding = def.bleeding, pain = def.pain, puls = def.puls, spo2 = def.spo2, bp = def.bp,
+        breathing = def.breathing, heal = def.heal, disinfect = def.disinfect or nil, fracture = def.fracture or nil,
+        treatment = table.Copy(def.treatment or {}),
+    }
+end
 
 -- Betaeubung (ArcCW-Betaeubungsmunition): keine Verletzung, nur Betaeubung
 DMS.StunLevels = {[1] = 0.05, [2] = 0.1, [3] = 0.5}

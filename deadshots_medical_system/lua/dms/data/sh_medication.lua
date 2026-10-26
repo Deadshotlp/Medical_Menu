@@ -55,6 +55,7 @@ local function M(id, name, kind, t)
     end
     return t
 end
+DMS.MakeMedication = M -- eigene Medikamente (sh_custom.lua)
 
 DMS.Medication = {
     M("quick_wake_ai", "Quick Wake (Autoinjektor)", "injector", {wake = true}),
