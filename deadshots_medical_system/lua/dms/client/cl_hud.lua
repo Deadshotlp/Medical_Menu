@@ -35,7 +35,11 @@ hook.Add("HUDPaint", "DMS.HUD", function()
             text = left > 0 and string.format(L("Respawn möglich in %d s"), left) or L("Klicken, um zu respawnen")
         end
         draw.SimpleText(text, "DMS.20", w / 2, h * 0.5, COL.dim, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
-        draw.SimpleText(L("F3: eigenen Zustand ansehen"), "DMS.18", w / 2, h * 0.54, COL.dim, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+        local key = tonumber(DMS.Get("key_self_down")) or 0
+        if key > 0 then
+            draw.SimpleText(string.format(L("%s: eigenen Zustand ansehen"), string.upper(input.GetKeyName(key) or "?")), "DMS.18",
+                w / 2, h * 0.54, COL.dim, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+        end
         return
     end
 
@@ -54,16 +58,41 @@ hook.Add("HUDPaint", "DMS.HUD", function()
     end
 end)
 
--- Den eigenen Zustand ansehen (auch bewusstlos)
--- und beim Aufwachen das eigene Fenster schliessen
-local wasDown, keyWas = false, false
+-- Tasten aus den Einstellungen (Konfiguration "Steuerung und Datapad"):
+-- Patient untersuchen, eigener Zustand, eigener Zustand im Bewusstlosen.
+-- Nochmal druecken schliesst das offene Fenster. Beim Aufwachen schliesst
+-- das eigene Fenster.
+local wasDown = false
+local keysWas = {}
+
+local function pressed(setting)
+    local key = tonumber(DMS.Get(setting)) or 0
+    local now = key > 0 and input.IsKeyDown(key) or false
+    local edge = now and not keysWas[setting]
+    keysWas[setting] = now
+    return edge
+end
+
 hook.Add("Think", "DMS.SelfKey", function()
     local ply = LocalPlayer()
     if not IsValid(ply) then return end
     local down = isDown(ply)
-    local key = input.IsKeyDown(KEY_F3) and not vgui.GetKeyboardFocus() and not gui.IsGameUIVisible()
-    if key and not keyWas and down and not IsValid(DMS.Interface.frame) then DMS.OpenPatient(ply) end
-    keyWas = key
+    local free = not vgui.GetKeyboardFocus() and not gui.IsGameUIVisible() and not ply:IsTyping()
+    local examine, self_, selfDown = pressed("key_examine"), pressed("key_self"), pressed("key_self_down")
+
+    if free then
+        local open = IsValid(DMS.Interface.frame)
+        if (examine or self_ or (selfDown and down)) and open then
+            DMS.Interface.Close()
+        elseif down and (selfDown or self_) then
+            DMS.OpenPatient(ply)
+        elseif not down and self_ then
+            DMS.OpenPatient(ply)
+        elseif not down and examine and ply:Alive() and not vgui.CursorVisible() then
+            DMS.OpenLookedAt()
+        end
+    end
+
     if wasDown and not down and DMS.Interface.patient == ply then DMS.Interface.Close() end
     wasDown = down
 end)

@@ -16,11 +16,13 @@ Standalone Garry's Mod addon for a realistic medical system. It is the successor
   - Right-click in the context menu (C) on a player or body.
   - Medical datapad (`dms_datapad`): LMB examines the target, RMB examines yourself.
   - Console commands `dms_open` and `dms_self`.
-  - F3 while unconscious shows your own condition.
+  - Configurable keys for examining a patient and viewing your own condition (F3 while unconscious by default).
 - **Treatments that change injuries:** a treatment can turn an injury into another one or remove it, for example a comminuted fracture becomes a simple fracture once the bone fragments are removed.
 - **Medics:** everyone, specific teams or specific user groups, or with DarkRP the job field `medic = true`. Some actions are reserved for medics.
 - **In-game configuration:** an icon in the context menu, superadmins only (also `dms_config`).
   - All settings.
+  - Modules: switch off infections, bleeding, pain, airway, ArcCW stun or the vital signs HUD.
+  - Keys and the datapad models (view model, world model, hands).
   - Language.
   - Per-injury and per-action overrides: disable, frequency, duration, treatments, conversions and so on.
   - Custom content: create new injuries, diagnostics, medication and treatments in-game.

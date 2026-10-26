@@ -69,6 +69,18 @@ local function settingsPage(parent, group)
             c:Dock(LEFT)
             c:SetWide(260)
             c.OnSelect = function(_, _, _, v) setSetting(key, v) end
+        elseif kind == "key" then
+            -- Taste waehlen (Klick, dann Taste druecken; Rechtsklick = keine)
+            local b = vgui.Create("DBinder", row)
+            b:Dock(LEFT)
+            b:SetWide(160)
+            b:SetFont("DMS.14")
+            b:SetValue(tonumber(value) or 0) -- vor OnChange: SetValue meldet sonst gleich eine Aenderung
+            b.OnChange = function(_, v) setSetting(key, v or 0) end
+            b.DoRightClick = function(s) s:SetValue(0) end
+            local u = UI.Label(row, (d[6] ~= "" and (L(d[6]) .. "  -  ") or "") .. L("Rechtsklick = keine Taste"), "DMS.12", COL.dim)
+            u:Dock(FILL)
+            u:DockMargin(8, 0, 0, 0)
         else
             local e = UI.Entry(row, value)
             e:Dock(LEFT)
@@ -80,7 +92,8 @@ local function settingsPage(parent, group)
                 if v ~= DMS.Get(key) then setSetting(key, v) end
             end
             e.OnEnter = commit
-            e.OnLoseFocus = function(s) commit() DTextEntry.OnLoseFocus(s) end
+            local baseLoseFocus = e.OnLoseFocus
+            e.OnLoseFocus = function(s) commit() if baseLoseFocus then baseLoseFocus(s) end end
             if d[6] and d[6] ~= "" then
                 local u = UI.Label(row, L(d[6]), "DMS.12", COL.dim)
                 u:Dock(FILL)
@@ -300,9 +313,7 @@ local function customPage(parent)
     for i, k in ipairs(DMS.CustomKinds) do
         local b = UI.Button(tabs, L(k.name), function()
             CFG.customKind = k.key
-            parent:Clear()
-            parent.PerformLayout = nil
-            customPage(parent)
+            if CFG.Choose then CFG.Choose(CFG.page) end
         end)
         b.Think = function(s) s.Col = CFG.customKind == k.key and COL.accent or COL.info end
         buttons[i] = b
@@ -331,7 +342,7 @@ local function customPage(parent)
     -- Seite neu aufbauen, sobald der Server gespeichert hat
     local function reloadSoon()
         timer.Simple(0.6, function()
-            if IsValid(parent) then parent:Clear() parent.PerformLayout = nil customPage(parent) end
+            if IsValid(parent) and CFG.Choose then CFG.Choose(CFG.page) end
         end)
     end
 
@@ -474,13 +485,24 @@ function CFG.Open(page)
     content:DockPadding(10, 10, 10, 10)
     content.Paint = function(_, w, h) draw.RoundedBox(0, 0, 0, w, h, COL.panel) end
 
+    -- Jede Seite in einem eigenen Behaelter: beim Wechsel wird der alte
+    -- sofort ausgeblendet und entfernt (frueher content:Clear() - dabei
+    -- blieben alte Seiten sichtbar stehen)
     local all = pages()
+    local holder
     local function choose(i)
         CFG.page = i
-        content:Clear()
-        content.PerformLayout = nil
-        all[i][2](content)
+        if IsValid(holder) then
+            holder:SetVisible(false)
+            holder:Remove()
+        end
+        holder = vgui.Create("DPanel", content)
+        holder:Dock(FILL)
+        holder.Paint = nil
+        local ok, err = pcall(all[i][2], holder)
+        if not ok then ErrorNoHalt("[DMS] Konfigurationsseite " .. tostring(all[i][1]) .. ": " .. tostring(err) .. "\n") end
     end
+    CFG.Choose = choose
     for i, pg in ipairs(all) do
         local b = UI.Button(nav, L(pg[1]), function() choose(i) end)
         b:Dock(TOP)

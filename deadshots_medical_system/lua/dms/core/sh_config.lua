@@ -2,7 +2,8 @@
     DMS - Einstellungen.
 
     DMS.SettingDefs beschreibt jede Einstellung (Schluessel, Standard, Art,
-    Gruppe, Beschriftung, Einheit). Werte speichert der Server in SQLite
+    Gruppe, Beschriftung, Einheit). Arten: number, bool, string, choice, key
+    (Taste, KEY_*-Wert; 0 = keine). Werte speichert der Server in SQLite
     (sv_db.lua) und schickt sie an alle Clients (net "DMS.Config"); geaendert
     werden sie im Konfigurationsmenue (server/sv_config.lua).
 
@@ -25,7 +26,6 @@ DMS.SettingDefs = {
     {"interaction_range", 100, "number", "general", "Reichweite für Behandlungen", "Einheiten"},
     {"auto_datapad", "medics", "choice", "general", "Medizinisches Datapad beim Spawn", "", {
         {"none", "Niemand"}, {"medics", "Nur Medics"}, {"all", "Alle Spieler"}}},
-    {"hud_enabled", true, "bool", "general", "Vitalwerte-Anzeige bei kritischen Werten", ""},
     {"update_interval", 1, "number", "general", "Berechnung der Vitalwerte alle", "s"},
 
     -- Schaden
@@ -34,7 +34,6 @@ DMS.SettingDefs = {
         {"hp", "Nur Lebenspunkte"}}},
     {"damage_per_injury", 20, "number", "damage", "Schaden je zusätzlicher Verletzung", "Schadenspunkte"},
     {"armor_value", 65, "number", "damage", "Schutz durch Rüstung", "0 - 100, 0 = keine Rüstung"},
-    {"stun_attachments", true, "bool", "damage", "ArcCW-Betäubungsmunition erkennen", ""},
     {"blood_regen", 0.0005, "number", "damage", "Natürliche Blutbildung", "Liter je Berechnung"},
 
     -- Bewusstlosigkeit und Tod
@@ -55,6 +54,22 @@ DMS.SettingDefs = {
     {"wake_dia_min", 40, "number", "unconscious", "Aufwachen: diastolisch ab", "mmHg"},
     {"wake_spo2_min", 85, "number", "unconscious", "Aufwachen: Sauerstoffsättigung ab", "%"},
 
+    -- Module (aus = Teil der Simulation laeuft nicht)
+    {"mod_infections", true, "bool", "modules", "Infektionen", "offene Wunden entzünden sich"},
+    {"mod_bleeding", true, "bool", "modules", "Blutungen", "Blutverlust durch Verletzungen"},
+    {"mod_pain", true, "bool", "modules", "Schmerz", "Schmerz wirkt auf Puls, Blutdruck und Bewusstsein"},
+    {"mod_airway", true, "bool", "modules", "Atemwege", "verlegte Atemwege bei Bewusstlosen, Atemdepression"},
+    {"stun_attachments", true, "bool", "modules", "ArcCW-Betäubungsmunition erkennen", ""},
+    {"hud_enabled", true, "bool", "modules", "Vitalwerte-Anzeige bei kritischen Werten", ""},
+
+    -- Steuerung und Datapad
+    {"key_examine", 0, "key", "controls", "Taste: Patient untersuchen", "Spieler oder Körper unter dem Fadenkreuz"},
+    {"key_self", 0, "key", "controls", "Taste: eigenen Zustand ansehen", ""},
+    {"key_self_down", KEY_F3, "key", "controls", "Taste: eigener Zustand (bewusstlos)", ""},
+    {"datapad_viewmodel", "models/weapons/c_medkit.mdl", "string", "controls", "Datapad: Modell in der Hand", "View-Modell (.mdl)"},
+    {"datapad_worldmodel", "models/weapons/w_medkit.mdl", "string", "controls", "Datapad: Modell für andere", "World-Modell (.mdl)"},
+    {"datapad_usehands", true, "bool", "controls", "Datapad: Spielerhände anzeigen", "nur bei c_-Modellen"},
+
     -- Infektionen
     {"infection_chance", 0.2, "number", "infection", "Infektionsrisiko offener Wunden", "% je Berechnung"},
     {"infection_growth", 0.002, "number", "infection", "Fortschreiten einer Infektion", "je Berechnung (1 = voll)"},
@@ -62,6 +77,8 @@ DMS.SettingDefs = {
 
 DMS.SettingGroups = {
     {"general", "Allgemein"},
+    {"modules", "Module"},
+    {"controls", "Steuerung und Datapad"},
     {"damage", "Schaden"},
     {"unconscious", "Bewusstlosigkeit und Tod"},
     {"infection", "Infektionen"},
@@ -86,8 +103,10 @@ function DMS.CoerceSetting(key, value)
     local d = defsByKey[key]
     if not d then return nil end
     local kind = d[3]
-    if kind == "number" then
-        return tonumber(value)
+    if kind == "number" or kind == "key" then
+        local n = tonumber(value)
+        if kind == "key" and n then n = math.Clamp(math.floor(n), 0, 255) end
+        return n
     elseif kind == "bool" then
         return value == true or value == 1 or value == "1" or value == "true"
     elseif kind == "choice" then

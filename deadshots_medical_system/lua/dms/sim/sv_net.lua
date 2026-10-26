@@ -87,6 +87,16 @@ local function logAction(tbl, actor, action, part)
     DMS.Log(tbl, actor:Nick() .. ": " .. L(action.name) .. where)
 end
 
+-- Fuehrt gerade jemand an diesem Patienten eine HLW durch (Aktion laeuft,
+-- Helfer in Reichweite)?
+function DMS.CPRActive(patient)
+    for _, ply in player.Iterator() do
+        local p = ply.DMS_Pending
+        if p and p.id == "cpr" and p.patient == patient and ply:Alive() and DMS.InRange(ply, patient, 50) then return true end
+    end
+    return false
+end
+
 net.Receive("DMS.Action", function(_, ply)
     local phase = net.ReadString()
     if phase == "cancel" then

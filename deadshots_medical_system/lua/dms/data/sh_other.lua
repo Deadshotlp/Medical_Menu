@@ -65,6 +65,7 @@ DMS.Other = {
         effect = function(actor, tbl, part) tbl.body_part[part].has_iv = false end,
     },
     {
+        -- Waehrend sie laeuft, haelt sie den Puls bei mindestens 30 bpm (sv_vitals.lua)
         id = "cpr", name = "Herz-Lungen-Wiederbelebung", time = 30, medic = false,
         condition = function(actor, tbl, part, patient) return part == 2 and down(patient) end,
         effect = function(actor, tbl)

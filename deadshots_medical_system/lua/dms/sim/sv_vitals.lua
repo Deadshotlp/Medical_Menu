@@ -15,6 +15,8 @@ DMS = DMS or {}
 
 local L = DMS.L
 local NORMAL_BLOOD = 5.5
+local CPR_PULSE = 30 -- bpm waehrend einer laufenden HLW
+local CPR_SPO2, CPR_SPO2_RATE = 80, 3 -- Beatmung: bis 80 % SpO2, 3 Punkte je Sekunde
 
 local function num(v, d) return isnumber(v) and v or d end
 
@@ -26,6 +28,7 @@ local function stepInjuries(tbl, dt)
     local mod = {puls = 0, spo2 = 0, bp = 0, breathing = 0, pain = 0}
     local bleed, fractured = {}, {}
     local chance = num(DMS.Get("infection_chance"), 0.2) / 100 * dt
+    local infections = DMS.Get("mod_infections") ~= false
 
     for i = #tbl.injuries, 1, -1 do
         local inj = tbl.injuries[i]
@@ -44,8 +47,8 @@ local function stepInjuries(tbl, dt)
         if num(inj.bleeding, 0) > 0 then bleed[inj.wo] = (bleed[inj.wo] or 0) + inj.bleeding end
         if inj.fracture then fractured[inj.wo == 3 and 2 or inj.wo] = true end
 
-        -- Offene, nicht desinfizierte Wunde kann sich entzuenden
-        if inj.disinfect and not inj.disinfected and not inj.infected and math.random() < chance then
+        -- Offene, nicht desinfizierte Wunde kann sich entzuenden (Modul Infektionen)
+        if infections and inj.disinfect and not inj.disinfected and not inj.infected and math.random() < chance then
             inj.infected = true
             table.insert(tbl.infections, {wo = inj.wo, severity = 0.05, source = inj.name})
         end
@@ -63,6 +66,11 @@ end
 --------------------------------------------------------------------------------
 
 local function stepInfections(tbl, dt, antibiotic, mod)
+    -- Modul aus: bestehende Infektionen verschwinden
+    if DMS.Get("mod_infections") == false then
+        tbl.infections = {}
+        return
+    end
     local growth = num(DMS.Get("infection_growth"), 0.002) * dt
     for i = #tbl.infections, 1, -1 do
         local inf = tbl.infections[i]
@@ -109,12 +117,15 @@ end
 -- 5. Puls, Blutdruck, Sauerstoff
 --------------------------------------------------------------------------------
 
-local function stepPulse(tbl, mod)
+-- protected: HLW laeuft oder Wiederbelebung frisch (revive_boost) - dann
+-- stoppt Sauerstoffmangel das Herz nicht sofort wieder; der Sauerstoff muss
+-- erst Zeit haben, wieder zu steigen
+local function stepPulse(tbl, mod, protected)
     if tbl.puls <= 0 then tbl.puls = 0 return end -- Herzstillstand: nur Wiederbelebung hilft
     local blood_loss = math.max(0, NORMAL_BLOOD - tbl.blood_amount)
     local target = 75 * (1 + mod.puls) + tbl.pain_level * 1.75 + blood_loss * 10.5 + math.random(-6, 6)
     tbl.puls = tbl.puls + (target - tbl.puls) * 0.1
-    if tbl.puls > 250 or tbl.spo2 <= 20 then tbl.puls = 0 end -- Kammerflimmern / Sauerstoffmangel
+    if tbl.puls > 250 or (tbl.spo2 <= 20 and not protected) then tbl.puls = 0 end -- Kammerflimmern / Sauerstoffmangel
     tbl.puls = math.Round(math.Clamp(tbl.puls, 0, 250))
 end
 
@@ -173,22 +184,31 @@ local function canWake(tbl)
 end
 
 function DMS.UpdatePatient(ply, tbl, dt)
+    local cpr = DMS.CPRActive and DMS.CPRActive(ply) or false
+    local protected = cpr or (tbl.revive_boost or 0) > os.time()
     local mod = stepInjuries(tbl, dt)
     local antibiotic, relief = stepMedication(tbl, mod)
     stepInfections(tbl, dt, antibiotic, mod)
 
-    tbl.pain_level = math.max(0, mod.pain - relief)
+    tbl.pain_level = DMS.Get("mod_pain") == false and 0 or math.max(0, mod.pain - relief)
 
     -- Atmung
     local resp = tbl.respiratory_system
     local rate = 15 - mod.breathing
+    local airway = DMS.Get("mod_airway") ~= false
+    if not airway then
+        resp.airway_clear = true
+        tbl.breathing_depressed_until = nil
+    end
     if (tbl.breathing_depressed_until or 0) > os.time() then rate = rate - 9 end
     if not resp.airway_clear then rate = 0 end
     resp.breathing_rate = math.max(0, rate)
 
     -- Blut: Verlust je Koerperteil (Tourniquet stoppt Blutung an Armen/Beinen)
     local loss = 0
+    local bleeding = DMS.Get("mod_bleeding") ~= false
     for _, part in ipairs(tbl.body_part) do
+        if not bleeding then part.bleeding = 0 end
         if part.bleeding > 0 and not part.tourniquet then
             loss = loss + part.bleeding * (tbl.puls / 10 + 1) * dt
         end
@@ -204,9 +224,17 @@ function DMS.UpdatePatient(ply, tbl, dt)
     end
     tbl.blood_amount = math.min(tbl.blood_amount, NORMAL_BLOOD)
 
-    stepPulse(tbl, mod)
+    stepPulse(tbl, mod, protected)
     stepBP(tbl, mod)
     stepSpO2(tbl, mod)
+
+    -- Laufende Herz-Lungen-Wiederbelebung: Puls mindestens CPR_PULSE, auch bei
+    -- Herzstillstand (Herzdruckmassage haelt den Kreislauf in Gang); die
+    -- Beatmung hebt die Sauerstoffsaettigung, solange die Atemwege frei sind
+    if cpr then
+        if tbl.puls < CPR_PULSE then tbl.puls = CPR_PULSE end
+        if resp.airway_clear and tbl.spo2 < CPR_SPO2 then tbl.spo2 = math.min(CPR_SPO2, tbl.spo2 + CPR_SPO2_RATE * dt) end
+    end
 
     if tbl.stunning_level > 0 then tbl.stunning_level = math.Clamp(tbl.stunning_level - 0.0033 * dt, 0, 1) end
 
@@ -216,7 +244,7 @@ function DMS.UpdatePatient(ply, tbl, dt)
     elseif IsValid(ply:GetNW2Entity("DMS.Ragdoll")) then
         if canWake(tbl) then
             DMS.Revive(ply)
-        elseif not tbl.recovery_position and resp.airway_clear
+        elseif airway and not protected and not tbl.recovery_position and resp.airway_clear
             and math.random() * 100 < num(DMS.Get("airway_block_chance"), 2) * dt then
             resp.airway_clear = false
         end
